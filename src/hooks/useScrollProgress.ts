@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import Lenis from 'lenis';
 import gsap from 'gsap';
 
 interface UseScrollProgressProps {
@@ -8,10 +7,19 @@ interface UseScrollProgressProps {
 }
 
 export interface ScrollProgressState {
-  progress: number; // Continuous 0 to (totalProjects - 1)
-  activeIndex: number; // Discrete active index
+  progress: number; // Continuous progress (can wrap infinitely)
+  activeIndex: number; // Discrete active index [0 .. totalProjects - 1]
   scrollToIndex: (index: number) => void;
+  stepBy: (deltaSteps: number) => void;
   isScrolling: boolean;
+}
+
+/**
+ * Normalizes any float/integer index into [0, totalProjects - 1]
+ */
+function normalizeIndex(value: number, total: number): number {
+  if (total <= 0) return 0;
+  return ((Math.round(value) % total) + total) % total;
 }
 
 export function useScrollProgress({
@@ -22,118 +30,187 @@ export function useScrollProgress({
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const [isScrolling, setIsScrolling] = useState<boolean>(false);
 
-  const lenisRef = useRef<Lenis | null>(null);
+  // Mutable animation target & current value driven by GSAP
+  const stateRef = useRef({
+    current: 0,
+    target: 0,
+    isDragging: false,
+    dragStartX: 0,
+    dragStartY: 0,
+    dragStartTarget: 0,
+  });
+
   const snapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isSnappingRef = useRef<boolean>(false);
-  const targetIndexRef = useRef<number>(0);
+  const tweenRef = useRef<gsap.core.Tween | null>(null);
 
-  // Programmatically animate to a specific project index
-  const scrollToIndex = useCallback(
-    (index: number) => {
-      const clamped = Math.max(0, Math.min(index, totalProjects - 1));
-      targetIndexRef.current = clamped;
-      isSnappingRef.current = true;
+  const animateToTarget = useCallback(
+    (newTarget: number, duration?: number) => {
+      stateRef.current.target = newTarget;
+      const animDuration =
+        duration !== undefined
+          ? duration
+          : prefersReducedMotion
+            ? 0.25
+            : 1.05;
 
-      const targetScroll = clamped * window.innerHeight;
-      if (lenisRef.current) {
-        lenisRef.current.scrollTo(targetScroll, {
-          duration: prefersReducedMotion ? 0.3 : 1.4,
-          easing: (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t)),
-          onComplete: () => {
-            isSnappingRef.current = false;
-          },
-        });
+      if (tweenRef.current) {
+        tweenRef.current.kill();
       }
+
+      tweenRef.current = gsap.to(stateRef.current, {
+        current: newTarget,
+        duration: animDuration,
+        ease: 'power3.out',
+        onUpdate: () => {
+          const cur = stateRef.current.current;
+          setProgress(cur);
+          setActiveIndex(normalizeIndex(cur, totalProjects));
+        },
+        onComplete: () => {
+          setIsScrolling(false);
+        },
+      });
     },
     [totalProjects, prefersReducedMotion]
   );
 
-  useEffect(() => {
-    // Initialize Lenis for smooth scroll
-    const lenis = new Lenis({
-      duration: prefersReducedMotion ? 0.4 : 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      orientation: 'vertical',
-      gestureOrientation: 'vertical',
-      smoothWheel: true,
-      wheelMultiplier: 1.0,
-      touchMultiplier: 1.6,
-      infinite: false,
-    });
+  // Schedule a gentle snap to the nearest integer project after wheel/drag settles
+  const scheduleSnap = useCallback(() => {
+    if (snapTimeoutRef.current) {
+      clearTimeout(snapTimeoutRef.current);
+    }
+    snapTimeoutRef.current = setTimeout(() => {
+      if (!stateRef.current.isDragging) {
+        const nearest = Math.round(stateRef.current.target);
+        animateToTarget(nearest, prefersReducedMotion ? 0.25 : 0.85);
+      }
+    }, 140);
+  }, [animateToTarget, prefersReducedMotion]);
 
-    lenisRef.current = lenis;
-
-    // RAF loop with GSAP ticker integration
-    const updateTicker = (time: number) => {
-      lenis.raf(time * 1000);
-    };
-
-    gsap.ticker.add(updateTicker);
-    gsap.ticker.lagSmoothing(0);
-
-    // Scroll listener to update progress
-    const onScroll = () => {
+  // Step forward or backward by N projects (supports infinite wrapping)
+  const stepBy = useCallback(
+    (deltaSteps: number) => {
+      if (snapTimeoutRef.current) clearTimeout(snapTimeoutRef.current);
       setIsScrolling(true);
-      const maxScroll = (totalProjects - 1) * window.innerHeight;
-      if (maxScroll <= 0) return;
+      const base = Math.round(stateRef.current.target);
+      animateToTarget(base + deltaSteps, prefersReducedMotion ? 0.25 : 1.1);
+    },
+    [animateToTarget, prefersReducedMotion]
+  );
 
-      const currentScroll = lenis.scroll;
-      const rawProgress = (currentScroll / maxScroll) * (totalProjects - 1);
-      const clampedProgress = Math.max(0, Math.min(rawProgress, totalProjects - 1));
-      
-      setProgress(clampedProgress);
-      const nearest = Math.round(clampedProgress);
-      setActiveIndex(nearest);
+  // Smoothly scroll to a specific project index (0 .. totalProjects - 1) via shortest path
+  const scrollToIndex = useCallback(
+    (targetIdx: number) => {
+      if (snapTimeoutRef.current) clearTimeout(snapTimeoutRef.current);
+      setIsScrolling(true);
+      const cur = stateRef.current.current;
+      let diff = (targetIdx - cur) % totalProjects;
+      if (diff > totalProjects / 2) diff -= totalProjects;
+      if (diff < -totalProjects / 2) diff += totalProjects;
+      animateToTarget(Math.round(cur + diff), prefersReducedMotion ? 0.25 : 1.15);
+    },
+    [totalProjects, animateToTarget, prefersReducedMotion]
+  );
 
-      // Snap to nearest project when user stops scrolling
-      if (snapTimeoutRef.current) {
-        clearTimeout(snapTimeoutRef.current);
-      }
+  useEffect(() => {
+    // 1. Mouse Wheel & Trackpad Gestures
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setIsScrolling(true);
 
-      snapTimeoutRef.current = setTimeout(() => {
-        setIsScrolling(false);
-        if (!isSnappingRef.current) {
-          const nearestTarget = Math.round(clampedProgress);
-          scrollToIndex(nearestTarget);
-        }
-      }, 160);
+      // Support both vertical wheel and horizontal trackpad two-finger swipe
+      const primaryDelta =
+        Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+
+      // Normalize wheel delta across mouse wheels and trackpads
+      const clampedDelta = Math.max(-120, Math.min(120, primaryDelta));
+      const step = clampedDelta * 0.0042;
+
+      const nextTarget = stateRef.current.target + step;
+      animateToTarget(nextTarget, prefersReducedMotion ? 0.15 : 0.55);
+      scheduleSnap();
     };
 
-    lenis.on('scroll', onScroll);
+    // 2. Mouse Drag & Touch Swipe Gestures
+    const handlePointerDown = (e: PointerEvent) => {
+      // Ignore clicks on the Visit Site link/button
+      if ((e.target as HTMLElement)?.closest('a, button')) return;
 
-    // Keyboard navigation (Arrow keys, Space, PageUp/Down)
+      stateRef.current.isDragging = true;
+      stateRef.current.dragStartX = e.clientX;
+      stateRef.current.dragStartY = e.clientY;
+      stateRef.current.dragStartTarget = stateRef.current.current;
+      if (snapTimeoutRef.current) clearTimeout(snapTimeoutRef.current);
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!stateRef.current.isDragging) return;
+
+      const dx = stateRef.current.dragStartX - e.clientX;
+      const dy = stateRef.current.dragStartY - e.clientY;
+
+      // Combine horizontal drag and vertical drag naturally
+      const dominantDelta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+      if (Math.abs(dominantDelta) > 4) {
+        setIsScrolling(true);
+        const sensitivity = window.innerWidth < 768 ? 0.0045 : 0.0028;
+        const nextTarget =
+          stateRef.current.dragStartTarget + dominantDelta * sensitivity;
+        animateToTarget(nextTarget, 0.25);
+      }
+    };
+
+    const handlePointerUp = () => {
+      if (!stateRef.current.isDragging) return;
+      stateRef.current.isDragging = false;
+      const nearest = Math.round(stateRef.current.target);
+      animateToTarget(nearest, prefersReducedMotion ? 0.25 : 0.85);
+    };
+
+    // 3. Keyboard Navigation (Arrow keys, Space, PageUp/PageDown)
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      if (
+        e.key === 'ArrowDown' ||
+        e.key === 'ArrowRight' ||
+        e.key === 'PageDown' ||
+        e.key === ' '
+      ) {
         e.preventDefault();
-        setActiveIndex((prev) => {
-          const next = Math.min(prev + 1, totalProjects - 1);
-          scrollToIndex(next);
-          return next;
-        });
-      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        stepBy(1);
+      } else if (
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowLeft' ||
+        e.key === 'PageUp'
+      ) {
         e.preventDefault();
-        setActiveIndex((prev) => {
-          const next = Math.max(prev - 1, 0);
-          scrollToIndex(next);
-          return next;
-        });
+        stepBy(-1);
       }
     };
 
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
+    window.addEventListener('pointerup', handlePointerUp, { passive: true });
+    window.addEventListener('pointercancel', handlePointerUp, { passive: true });
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       if (snapTimeoutRef.current) clearTimeout(snapTimeoutRef.current);
+      if (tweenRef.current) tweenRef.current.kill();
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
       window.removeEventListener('keydown', handleKeyDown);
-      gsap.ticker.remove(updateTicker);
-      lenis.destroy();
     };
-  }, [totalProjects, prefersReducedMotion, scrollToIndex]);
+  }, [animateToTarget, scheduleSnap, stepBy, prefersReducedMotion]);
 
   return {
     progress,
     activeIndex,
     scrollToIndex,
+    stepBy,
     isScrolling,
   };
 }

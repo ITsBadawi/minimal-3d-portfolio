@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
 import { ProjectItem } from '../../data/projects';
@@ -18,7 +18,8 @@ interface SceneProps {
   particlesCount: number;
   reflectionResolution: number;
   enablePostProcessing: boolean;
-  onSwipeDelta?: (delta: number) => void;
+  onSelectProject?: (index: number) => void;
+  onHoverScreen?: (hovered: boolean) => void;
 }
 
 export const Scene: React.FC<SceneProps> = ({
@@ -30,10 +31,10 @@ export const Scene: React.FC<SceneProps> = ({
   particlesCount,
   reflectionResolution,
   enablePostProcessing,
-  onSwipeDelta,
+  onSelectProject,
+  onHoverScreen,
 }) => {
   const [pointer, setPointer] = useState({ x: 0, y: 0 });
-  const touchStartRef = useRef<number | null>(null);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -49,36 +50,11 @@ export const Scene: React.FC<SceneProps> = ({
     };
   }, []);
 
-  // Touch Drag / Swipe on mobile screens
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length > 0) {
-      touchStartRef.current = e.touches[0].clientY;
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartRef.current !== null && e.touches.length > 0 && onSwipeDelta) {
-      const currentY = e.touches[0].clientY;
-      const diff = touchStartRef.current - currentY;
-      onSwipeDelta(diff * 0.0035);
-      touchStartRef.current = currentY;
-    }
-  };
-
-  const handleTouchEnd = () => {
-    touchStartRef.current = null;
-  };
-
   return (
-    <div
-      className="canvas-container"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className="canvas-container">
       <Canvas
         dpr={[1, dpr]}
-        camera={{ position: [0, 0, 10], fov: 45, near: 0.1, far: 80 }}
+        camera={{ position: [0, 0.74, 10], fov: 45, near: 0.1, far: 80 }}
         gl={{
           antialias: true,
           alpha: false,
@@ -89,7 +65,7 @@ export const Scene: React.FC<SceneProps> = ({
       >
         {/* Background & Atmosphere Fog */}
         <color attach="background" args={['#030303']} />
-        <fog attach="fog" args={['#030303', 10, 48]} />
+        <fog attach="fog" args={['#030303', 10, 36]} />
 
         {/* Cinematic Studio Lighting */}
         <Lighting />
@@ -106,9 +82,12 @@ export const Scene: React.FC<SceneProps> = ({
             key={project.id}
             project={project}
             index={i}
+            totalProjects={projects.length}
             progress={progress}
             isMobile={isMobile}
             pointer={pointer}
+            onSelectProject={onSelectProject}
+            onHoverScreen={onHoverScreen}
           />
         ))}
 

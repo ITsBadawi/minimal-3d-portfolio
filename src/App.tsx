@@ -23,15 +23,6 @@ export function App() {
     setIntroDone(true);
   }, []);
 
-  const handleSwipeDelta = useCallback(
-    (delta: number) => {
-      const newProgress = Math.max(0, Math.min(progress + delta, projects.length - 1));
-      const targetIndex = Math.round(newProgress);
-      scrollToIndex(targetIndex);
-    },
-    [progress, projects.length, scrollToIndex]
-  );
-
   return (
     <main role="main">
       {/* 2-Second Cinematic Intro & Minimal Progress Line */}
@@ -50,20 +41,14 @@ export function App() {
         particlesCount={device.particlesCount}
         reflectionResolution={device.reflectionResolution}
         enablePostProcessing={device.enablePostProcessing}
-        onSwipeDelta={handleSwipeDelta}
+        onSelectProject={scrollToIndex}
+        onHoverScreen={setCursorExpanded}
       />
 
       {/* HTML Overlay: Project Title & "Visit Site ↗" Button */}
       <Overlay
         currentProject={currentProject}
         onHoverButton={setCursorExpanded}
-      />
-
-      {/* Virtual Scroll Height Anchor for Lenis */}
-      <div
-        className="scroll-container"
-        style={{ height: `${projects.length * 100}vh` }}
-        aria-hidden="true"
       />
     </main>
   );

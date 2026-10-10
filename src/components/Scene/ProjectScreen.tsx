@@ -1,24 +1,30 @@
-import React, { useRef, useMemo, useEffect, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
+import React, { useRef, useEffect, useState } from 'react';
+import { useFrame, ThreeEvent } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { ProjectItem } from '../../data/projects';
-import { getPathPoint } from '../../utils/curveLayout';
+import { getWrappedDiff, getArcTransform } from '../../utils/curveLayout';
 
 interface ProjectScreenProps {
   project: ProjectItem;
   index: number;
+  totalProjects: number;
   progress: number;
   isMobile: boolean;
   pointer: { x: number; y: number };
+  onSelectProject?: (index: number) => void;
+  onHoverScreen?: (hovered: boolean) => void;
 }
 
 export const ProjectScreen: React.FC<ProjectScreenProps> = ({
   project,
   index,
+  totalProjects,
   progress,
   isMobile,
   pointer,
+  onSelectProject,
+  onHoverScreen,
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const screenMatRef = useRef<THREE.MeshBasicMaterial>(null);
@@ -26,16 +32,18 @@ export const ProjectScreen: React.FC<ProjectScreenProps> = ({
   const pointLightRef = useRef<THREE.PointLight>(null);
 
   // Screen dimensions (16:10 aspect ratio)
-  const [width, height, depth] = isMobile ? [3.2, 2.0, 0.08] : [4.3, 2.68, 0.08];
+  const [width, height, depth] = isMobile ? [3.0, 1.88, 0.08] : [3.95, 2.47, 0.08];
   const screenW = width - 0.12;
   const screenH = height - 0.12;
 
-  // Base spatial placement along the curved trajectory
-  const baseTransform = useMemo(() => getPathPoint(index, isMobile), [index, isMobile]);
+  // Initial placement
+  const initialDiff = getWrappedDiff(index, 0, totalProjects);
+  const initialTransform = getArcTransform(initialDiff, isMobile);
 
   // Robust texture handling supporting Images, SVGs, and MP4 videos
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -102,66 +110,97 @@ export const ProjectScreen: React.FC<ProjectScreenProps> = ({
   useFrame((_, delta) => {
     if (!groupRef.current) return;
 
-    // Focus distance calculation
-    const dist = Math.abs(index - progress);
-    const focusFactor = Math.max(0, 1 - Math.min(dist * 1.05, 1)); // 1.0 when active, 0.0 when offscreen
+    const diff = getWrappedDiff(index, progress, totalProjects);
+    const absDiff = Math.abs(diff);
+    const arcTransform = getArcTransform(diff, isMobile);
+
+    // Focus factor: 1.0 when centered, 0.0 when >= 1 project away
+    const focusFactor = Math.max(0, 1 - Math.min(absDiff, 1));
 
     // Pause offscreen videos to maximize framerate
     if (project.isVideo && videoRef.current) {
-      if (dist > 1.2 && !videoRef.current.paused) {
+      if (absDiff > 1.2 && !videoRef.current.paused) {
         videoRef.current.pause();
-      } else if (dist <= 1.2 && videoRef.current.paused) {
+      } else if (absDiff <= 1.2 && videoRef.current.paused) {
         videoRef.current.play().catch(() => {});
       }
     }
 
-    // 1. Scale: expands subtly when focused (1.06), recedes to 0.90 when distant
-    const targetScale = THREE.MathUtils.lerp(0.9, 1.06, focusFactor);
-    groupRef.current.scale.x = THREE.MathUtils.damp(groupRef.current.scale.x, targetScale, 4.5, delta);
-    groupRef.current.scale.y = THREE.MathUtils.damp(groupRef.current.scale.y, targetScale, 4.5, delta);
-    groupRef.current.scale.z = THREE.MathUtils.damp(groupRef.current.scale.z, targetScale, 4.5, delta);
+    // 1. Position along the 3D arc
+    groupRef.current.position.x = THREE.MathUtils.damp(
+      groupRef.current.position.x,
+      arcTransform.position[0],
+      6.5,
+      delta
+    );
+    groupRef.current.position.y = THREE.MathUtils.damp(
+      groupRef.current.position.y,
+      arcTransform.position[1],
+      6.5,
+      delta
+    );
+    groupRef.current.position.z = THREE.MathUtils.damp(
+      groupRef.current.position.z,
+      arcTransform.position[2],
+      6.5,
+      delta
+    );
 
-    // 2. Parallax tilt: screen tilts toward the cursor when focused
+    // 2. Scale: expands when focused (1.06), scales down smoothly with distance along arc
+    const targetScale =
+      absDiff < 1
+        ? THREE.MathUtils.lerp(0.84, 1.06, focusFactor)
+        : Math.max(0.72, 0.84 - (absDiff - 1) * 0.1);
+
+    groupRef.current.scale.x = THREE.MathUtils.damp(groupRef.current.scale.x, targetScale, 5.5, delta);
+    groupRef.current.scale.y = THREE.MathUtils.damp(groupRef.current.scale.y, targetScale, 5.5, delta);
+    groupRef.current.scale.z = THREE.MathUtils.damp(groupRef.current.scale.z, targetScale, 5.5, delta);
+
+    // 3. Parallax tilt: screen tilts toward the cursor when focused
     const parallaxIntensityX = isMobile ? 0.03 : 0.11;
     const parallaxIntensityY = isMobile ? 0.04 : 0.15;
 
-    const targetRotX = baseTransform.rotation[0] - pointer.y * parallaxIntensityX * focusFactor;
-    const targetRotY = baseTransform.rotation[1] + pointer.x * parallaxIntensityY * focusFactor;
-    const targetRotZ = baseTransform.rotation[2];
+    const targetRotX = arcTransform.rotation[0] - pointer.y * parallaxIntensityX * focusFactor;
+    const targetRotY = arcTransform.rotation[1] + pointer.x * parallaxIntensityY * focusFactor;
+    const targetRotZ = arcTransform.rotation[2];
 
     groupRef.current.rotation.x = THREE.MathUtils.damp(
       groupRef.current.rotation.x,
       targetRotX,
-      4.8,
+      5.5,
       delta
     );
     groupRef.current.rotation.y = THREE.MathUtils.damp(
       groupRef.current.rotation.y,
       targetRotY,
-      4.8,
+      5.5,
       delta
     );
     groupRef.current.rotation.z = THREE.MathUtils.damp(
       groupRef.current.rotation.z,
       targetRotZ,
-      4.8,
+      5.5,
       delta
     );
 
-    // 3. Screen display brightness & opacity (crisp OLED punch when focused, dimmed when distant)
+    // 4. Screen display brightness & opacity (1.0 when focused, 0.52 for immediate neighbors, 0.28 for far)
     if (screenMatRef.current) {
-      const targetOpacity = THREE.MathUtils.lerp(0.24, 1.0, focusFactor);
+      const targetOpacity =
+        absDiff <= 1
+          ? THREE.MathUtils.lerp(0.52, 1.0, focusFactor)
+          : Math.max(0.24, 0.52 - (absDiff - 1) * 0.24);
+
       screenMatRef.current.opacity = THREE.MathUtils.damp(
         screenMatRef.current.opacity,
         targetOpacity,
-        5.5,
+        6.0,
         delta
       );
     }
 
-    // 4. Chassis metallic rim intensity
+    // 5. Chassis metallic rim intensity
     if (frameMatRef.current) {
-      const targetRoughness = THREE.MathUtils.lerp(0.35, 0.18, focusFactor);
+      const targetRoughness = THREE.MathUtils.lerp(0.32, 0.18, focusFactor);
       frameMatRef.current.roughness = THREE.MathUtils.damp(
         frameMatRef.current.roughness,
         targetRoughness,
@@ -170,9 +209,9 @@ export const ProjectScreen: React.FC<ProjectScreenProps> = ({
       );
     }
 
-    // 5. Rear ambient halo light behind screen
+    // 6. Rear ambient halo light behind screen
     if (pointLightRef.current) {
-      const targetLightIntensity = THREE.MathUtils.lerp(0.1, 2.5, focusFactor);
+      const targetLightIntensity = THREE.MathUtils.lerp(0.25, 2.6, focusFactor);
       pointLightRef.current.intensity = THREE.MathUtils.damp(
         pointLightRef.current.intensity,
         targetLightIntensity,
@@ -182,11 +221,37 @@ export const ProjectScreen: React.FC<ProjectScreenProps> = ({
     }
   });
 
+  const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+    pointerDownPos.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    // Only treat as click if pointer didn't drag far
+    if (pointerDownPos.current) {
+      const dx = Math.abs(e.clientX - pointerDownPos.current.x);
+      const dy = Math.abs(e.clientY - pointerDownPos.current.y);
+      if (dx > 8 || dy > 8) return;
+    }
+    if (onSelectProject) {
+      onSelectProject(index);
+    }
+  };
+
   return (
     <group
       ref={groupRef}
-      position={baseTransform.position}
-      rotation={baseTransform.rotation}
+      position={initialTransform.position}
+      rotation={initialTransform.rotation}
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        if (onHoverScreen) onHoverScreen(true);
+      }}
+      onPointerOut={() => {
+        if (onHoverScreen) onHoverScreen(false);
+      }}
     >
       {/* Outer Titanium Beveled Frame */}
       <RoundedBox
@@ -196,10 +261,10 @@ export const ProjectScreen: React.FC<ProjectScreenProps> = ({
       >
         <meshStandardMaterial
           ref={frameMatRef}
-          color="#0c0d12"
-          metalness={0.96}
+          color="#101218"
+          metalness={0.95}
           roughness={0.2}
-          envMapIntensity={1.0}
+          envMapIntensity={1.1}
         />
       </RoundedBox>
 
@@ -210,8 +275,8 @@ export const ProjectScreen: React.FC<ProjectScreenProps> = ({
           ref={screenMatRef}
           map={texture}
           transparent={true}
-          opacity={0.3}
-          toneMapped={false}
+          opacity={0.6}
+          toneMapped={true}
         />
       </mesh>
 
@@ -220,8 +285,8 @@ export const ProjectScreen: React.FC<ProjectScreenProps> = ({
         ref={pointLightRef}
         position={[0, 0, -0.25]}
         color={project.color || '#38bdf8'}
-        intensity={0.1}
-        distance={3.8}
+        intensity={0.25}
+        distance={4.2}
         decay={2}
       />
     </group>

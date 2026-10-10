@@ -19,7 +19,7 @@ export const Effects: React.FC<EffectsProps> = ({
   isMobile = false,
 }) => {
   const aberrationOffset = useMemo(
-    () => new THREE.Vector2(0.0006, 0.0006),
+    () => new THREE.Vector2(0.0004, 0.0004),
     []
   );
 
@@ -29,11 +29,11 @@ export const Effects: React.FC<EffectsProps> = ({
 
   return (
     <EffectComposer multisampling={0}>
-      {/* Subtle bloom for glowing UI lines and lights */}
+      {/* Subtle bloom calibrated for both dark and light website screenshots */}
       <Bloom
-        luminanceThreshold={0.8}
-        luminanceSmoothing={0.25}
-        intensity={0.4}
+        luminanceThreshold={0.95}
+        luminanceSmoothing={0.2}
+        intensity={0.22}
         mipmapBlur
       />
 
@@ -43,7 +43,7 @@ export const Effects: React.FC<EffectsProps> = ({
       {/* Very light organic film grain (omitted on mobile for performance) */}
       {!isMobile && (
         <Noise
-          opacity={0.022}
+          opacity={0.02}
           blendFunction={BlendFunction.OVERLAY}
         />
       )}
