@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="ogGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#030303"/>
+  <circle cx="600" cy="315" r="400" fill="url(#ogGlow)"/>
+  <rect x="520" y="160" width="160" height="100" rx="16" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.4"/>
+  <text x="600" y="380" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="44" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="-1">SELECTED WEB WORKS</text>
+  <text x="600" y="430" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="500" fill="rgba(255, 255, 255, 0.4)" text-anchor="middle" letter-spacing="4">3D SPATIAL ARCHIVE</text>
+</svg>
