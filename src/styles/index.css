@@ -103,7 +103,6 @@ html {
   color: #ffffff;
   text-shadow: 0 12px 40px rgba(0, 0, 0, 0.95), 0 0 60px rgba(255, 255, 255, 0.08);
   will-change: transform, opacity, filter;
-  text-transform: capitalize;
 }
 
 /* Pill Button "Visit Site ↗" */

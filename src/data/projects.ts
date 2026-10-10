@@ -15,53 +15,46 @@ export interface ProjectItem {
  *   id: 'unique-id',
  *   name: 'Project Name',
  *   url: 'https://yourproject.com',
- *   media: '/projects/your-screenshot.webp', // or .png, .jpg, .svg, .mp4
- *   color: '#00f2fe'
+ *   media: '/projects/your-screenshot.png',
+ *   color: '#f59e0b'
  * }
  * 
  * The 3D scene curve, camera path, and scroll snaps recalculate automatically.
  */
 export const projects: ProjectItem[] = [
   {
-    id: 'aura-protocol',
-    name: 'Aura Protocol',
-    url: 'https://linear.app',
-    media: '/projects/aura.svg',
-    color: '#00f2fe',
-  },
-  {
-    id: 'kroma-studio',
-    name: 'Kroma Studio',
-    url: 'https://stripe.com',
-    media: '/projects/kroma.svg',
-    color: '#e2e8f0',
-  },
-  {
-    id: 'voxel-horizon',
-    name: 'Voxel Horizon',
-    url: 'https://vercel.com',
-    media: '/projects/voxel.svg',
-    color: '#f72585',
-  },
-  {
-    id: 'solis-engine',
-    name: 'Solis Engine',
-    url: 'https://apple.com',
-    media: '/projects/solis.svg',
+    id: 'autovia',
+    name: 'AUTOVIA',
+    url: 'https://autovia-showroom.vercel.app/',
+    media: '/projects/autovia.png',
     color: '#f59e0b',
   },
   {
-    id: 'nebula-os',
-    name: 'Nebula OS',
-    url: 'https://github.com',
-    media: '/projects/nebula.svg',
-    color: '#6366f1',
+    id: 'luma-clinic',
+    name: 'LUMA CLINIC',
+    url: 'https://luma-clinic-website.vercel.app/',
+    media: '/projects/luma-clinic.png',
+    color: '#10b981',
   },
   {
-    id: 'chronos-spatial',
-    name: 'Chronos Spatial',
-    url: 'https://figma.com',
-    media: '/projects/chronos.svg',
-    color: '#10b981',
+    id: 'iron-pulse',
+    name: 'IRON PULSE',
+    url: 'https://iron-pulse-gym-eosin.vercel.app/',
+    media: '/projects/iron-pulse.png',
+    color: '#ef4444',
+  },
+  {
+    id: 'darazen',
+    name: 'DARAZEN',
+    url: 'https://darazen.com/',
+    media: '/projects/darazen.png',
+    color: '#8b5cf6',
+  },
+  {
+    id: 'halo-agency',
+    name: 'HALO AGENCY',
+    url: 'https://halo-agency-website.vercel.app/',
+    media: '/projects/halo-agency.png',
+    color: '#a855f7',
   },
 ];

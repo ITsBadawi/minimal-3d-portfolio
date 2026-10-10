@@ -45,13 +45,12 @@ Built with **Vite**, **React 19**, **TypeScript**, **Three.js** (`@react-three/f
 ```
 resilient-salk/
 ├── public/
-│   ├── projects/                  # Web project showcase mockups (SVG / PNG / WebP / MP4)
-│   │   ├── aura.svg
-│   │   ├── kroma.svg
-│   │   ├── voxel.svg
-│   │   ├── solis.svg
-│   │   ├── nebula.svg
-│   │   └── chronos.svg
+│   ├── projects/                  # Web project showcase screenshots (PNG / WebP / MP4)
+│   │   ├── autovia.png
+│   │   ├── luma-clinic.png
+│   │   ├── iron-pulse.png
+│   │   ├── darazen.png
+│   │   └── halo-agency.png
 │   └── og-preview.svg             # Open Graph social share image
 ├── src/
 │   ├── components/
